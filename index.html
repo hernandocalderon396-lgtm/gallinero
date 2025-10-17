@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Panel Granja - Control</title>
+  <style>
+    :root{
+      --card:#0b1220; --accent:#10b981; --danger:#ef4444; --muted:#94a3b8; --button:#0ea5a4;
+    }
+    body{
+      font-family: Inter, system-ui, Arial; margin:0; color:#e6eef8;
+      background: url('https://cdn.pixabay.com/photo/2017/06/22/18/31/chickens-2430640_1280.jpg') no-repeat center center fixed;
+      background-size: cover;
+      overflow-x:hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      top:0;left:0;width:100%;height:100%;
+      background: rgba(0,0,0,0.55);
+      z-index:-1;
+      animation: fadeBg 20s infinite alternate ease-in-out;
+    }
+    @keyframes fadeBg {
+      0% { background: rgba(0,0,0,0.45); }
+      100% { background: rgba(0,0,0,0.65); }
+    }
+    .wrap{max-width:980px;margin:28px auto;padding:20px}
+    header{display:flex;align-items:center;justify-content:space-between}
+    h1{font-size:20px;margin:0}
+    small{color:var(--muted)}
+
+    .grid{display:grid;grid-template-columns: 1fr 360px;gap:18px;margin-top:18px}
+    .card{background:var(--card);padding:16px;border-radius:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6);backdrop-filter: blur(5px);}
+
+    .controls{display:flex;flex-direction:column;gap:12px}
+    .buttons{display:flex;gap:10px;flex-wrap:wrap}
+    button{background:var(--button);border:none;color:#042024;padding:10px 14px;border-radius:10px;font-weight:600;cursor:pointer;transition:transform .2s}
+    button:hover{transform:scale(1.05)}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.06);color:var(--muted)}
+    button.danger{background:var(--danger);color:white}
+
+    .status-row{display:flex;gap:12px;align-items:center}
+    .meter{width:100%;height:18px;background:rgba(255,255,255,0.1);border-radius:8px;overflow:hidden;position:relative}
+    .meter > i{position:absolute;left:0;top:0;bottom:0;width:50%;background:linear-gradient(90deg,var(--accent),#06b6d4)}
+    .meter-label{display:flex;justify-content:space-between;font-size:13px;margin-top:6px;color:var(--muted)}
+
+    label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+    input[type=range]{width:100%}
+
+    .chip{background:rgba(255,255,255,0.1);padding:6px 10px;border-radius:999px;font-weight:600}
+    footer{margin-top:18px;color:var(--muted);font-size:13px;text-align:center}
+
+    @media (max-width:900px){.grid{grid-template-columns:1fr;}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>🐔 Panel Granja — Control de Gallinero</h1>
+        <small>Control manual / automático • Niveles de purina y agua</small>
+      </div>
+      <div class="chip">Conectado: <span id="conn">—</span></div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <div class="controls">
+          <h3>Acciones manuales</h3>
+          <div class="buttons">
+            <button id="btnFeed">🍚 Dar comida</button>
+            <button id="btnWater">💧 Activar agua</button>
+            <button id="btnStop" class="danger">⛔ Parar</button>
+          </div>
+
+          <h3>Modo automático</h3>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:8px">
+            <label><input type="checkbox" id="toggleAuto"> Activar automático</label>
+            <button id="btnApply" class="secondary">Guardar</button>
+          </div>
+
+          <label>Umbral purina</label>
+          <input id="feedThreshold" type="range" min="0" max="100" value="20">
+          <div class="meter-label"><span>Umbral:</span><strong id="feedTVal">20 %</strong></div>
+
+          <label>Umbral agua</label>
+          <input id="waterThreshold" type="range" min="0" max="100" value="30">
+          <div class="meter-label"><span>Umbral:</span><strong id="waterTVal">30 %</strong></div>
+          <small>Última acción: <span id="lastAction">—</span></small>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Estado actual</h3>
+        <label>Purina</label>
+        <div class="meter" id="feedMeter"><i style="width:0%"></i></div>
+        <div class="meter-label"><span>Porcentaje</span><strong id="feedVal">0 %</strong></div>
+
+        <label>Agua</label>
+        <div class="meter" id="waterMeter"><i style="width:0%"></i></div>
+        <div class="meter-label"><span>Porcentaje</span><strong id="waterVal">0 %</strong></div>
+
+        <label>Logs</label>
+        <div id="logBox" style="background:rgba(255,255,255,0.05);padding:8px;border-radius:8px;height:120px;overflow:auto;color:var(--muted);font-size:13px">Sin eventos</div>
+      </div>
+    </div>
+
+    <footer>
+      <small>Panel Granja v2 — ESP32 Control</small>
+    </footer>
+  </div>
+
+  <script>
+    const baseURL = '';
+    const connEl = document.getElementById('conn');
+    const feedMeter = document.querySelector('#feedMeter i');
+    const waterMeter = document.querySelector('#waterMeter i');
+    const feedVal = document.getElementById('feedVal');
+    const waterVal = document.getElementById('waterVal');
+    const logBox = document.getElementById('logBox');
+    const lastAction = document.getElementById('lastAction');
+    const btnFeed = document.getElementById('btnFeed');
+    const btnWater = document.getElementById('btnWater');
+    const btnStop = document.getElementById('btnStop');
+    const toggleAuto = document.getElementById('toggleAuto');
+    const feedThreshold = document.getElementById('feedThreshold');
+    const waterThreshold = document.getElementById('waterThreshold');
+    const feedTVal = document.getElementById('feedTVal');
+    const waterTVal = document.getElementById('waterTVal');
+    const btnApply = document.getElementById('btnApply');
+
+    function log(msg){
+      const t = new Date().toLocaleTimeString();
+      logBox.innerHTML = `<div>[${t}] ${msg}</div>` + logBox.innerHTML;
+    }
+    function setMeter(el, pct){ pct=Math.max(0,Math.min(100,Math.round(pct))); el.style.width=pct+'%'; }
+
+    async function apiGET(path){
+      const res = await fetch(baseURL+path);
+      return await res.json();
+    }
+    async function apiPOST(path,body){
+      await fetch(baseURL+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    }
+
+    btnFeed.onclick = async ()=>{await apiPOST('/action',{action:'feed'}); lastAction.textContent='Comida manual'; log('Comida manual');}
+    btnWater.onclick = async ()=>{await apiPOST('/action',{action:'water'}); lastAction.textContent='Agua manual'; log('Agua manual');}
+    btnStop.onclick = async ()=>{await apiPOST('/action',{action:'stop'}); lastAction.textContent='Parado'; log('Parar');}
+    btnApply.onclick = async ()=>{await apiPOST('/config',{mode:toggleAuto.checked?'auto':'manual',feed_threshold:+feedThreshold.value,water_threshold:+waterThreshold.value}); log('Configuración guardada');}
+
+    feedThreshold.oninput = ()=> feedTVal.textContent = feedThreshold.value + ' %';
+    waterThreshold.oninput = ()=> waterTVal.textContent = waterThreshold.value + ' %';
+
+    async function refresh(){
+      try{
+        const s=await apiGET('/status');
+        connEl.textContent='ONLINE';connEl.style.color='#34d399';
+        setMeter(feedMeter,s.feed_level); feedVal.textContent=s.feed_level+' %';
+        setMeter(waterMeter,s.water_level); waterVal.textContent=s.water_level+' %';
+        toggleAuto.checked=(s.mode==='auto');
+        feedThreshold.value=s.feed_threshold; waterThreshold.value=s.water_threshold;
+        feedTVal.textContent=feedThreshold.value+' %'; waterTVal.textContent=waterThreshold.value+' %';
+      }catch(e){connEl.textContent='OFFLINE';connEl.style.color='#f87171';}
+    }
+    refresh(); setInterval(refresh,5000);
+  </script>
+</body>
+</html>
